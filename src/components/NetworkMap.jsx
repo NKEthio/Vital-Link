@@ -1,71 +1,237 @@
-import { forwardRef, useImperativeHandle, useRef } from 'react'
-import { computeForecast, riskColor, lineKey, dist, transferMinutes } from '../lib/forecast.js'
-
-const SVGNS = 'http://www.w3.org/2000/svg'
-
-function makeEl(tag, attrs) {
-  const e = document.createElementNS(SVGNS, tag)
-  for (const k in attrs) e.setAttribute(k, attrs[k])
-  return e
-}
+import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react'
+import L from 'leaflet'
+import 'leaflet/dist/leaflet.css'
+import { computeForecast, riskColorHex, lineKey, dist, transferMinutes } from '../lib/forecast.js'
+import { MAP_CENTER, MAP_ZOOM } from '../data/network.js'
 
 /**
- * Renders the mesh map. Hospital nodes and lines are plain declarative JSX
- * (they re-render whenever `hospitals` changes), but the drone dispatch
- * sequence is done imperatively via raw DOM nodes appended to the SVG ref —
- * exposed through `animateDrone()` on the ref — so a 60fps flight animation
- * doesn't trigger a React re-render on every frame.
+ * Renders an interactive Leaflet map using OpenStreetMap tiles centered on Mekane Selam, Ethiopia.
+ * Displays interactive custom HTML markers for hospitals and suppliers, mesh/escalation connections,
+ * and imperatively manages real-time drone flight dispatch animations with smooth coordinate interpolation.
  */
 const NetworkMap = forwardRef(function NetworkMap(
   { hospitals, externals, meshPairs, escalationPairs, selectedId, onSelect, activeTransferKeys },
   ref
 ) {
-  const svgRef = useRef(null)
+  const mapContainerRef = useRef(null)
+  const leafletMapRef = useRef(null)
+  const markersRef = useRef({})
+  const polylinesRef = useRef({})
   const bannerRef = useRef(null)
+  const activeAnimRef = useRef(null)
 
+  function byId(id) {
+    return hospitals.find((h) => h.id === id) || externals[id]
+  }
+
+  // Initialize Leaflet Map once
+  useEffect(() => {
+    if (!mapContainerRef.current || leafletMapRef.current) return
+
+    const map = L.map(mapContainerRef.current, {
+      center: MAP_CENTER,
+      zoom: MAP_ZOOM,
+      zoomControl: true,
+      attributionControl: true,
+    })
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 18,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    }).addTo(map)
+
+    leafletMapRef.current = map
+
+    return () => {
+      map.remove()
+      leafletMapRef.current = null
+    }
+  }, [])
+
+  // Update Polylines (mesh and escalation connections)
+  useEffect(() => {
+    const map = leafletMapRef.current
+    if (!map) return
+
+    // Clean up old polylines
+    Object.values(polylinesRef.current).forEach((p) => map.removeLayer(p))
+    polylinesRef.current = {}
+
+    // Escalation lines (dashed line to external suppliers)
+    escalationPairs.forEach(([a, b]) => {
+      const A = byId(a)
+      const B = byId(b)
+      if (A && B && A.lat && B.lat) {
+        const polyline = L.polyline(
+          [
+            [A.lat, A.lng],
+            [B.lat, B.lng],
+          ],
+          {
+            color: '#94a3b8',
+            weight: 2,
+            dashArray: '5, 7',
+            opacity: 0.7,
+          }
+        ).addTo(map)
+        polylinesRef.current[`esc-${a}-${b}`] = polyline
+      }
+    })
+
+    // Mesh network lines
+    meshPairs.forEach(([a, b]) => {
+      const A = byId(a)
+      const B = byId(b)
+      if (A && B && A.lat && B.lat) {
+        const key = lineKey(a, b)
+        const active = activeTransferKeys.has(key)
+        const polyline = L.polyline(
+          [
+            [A.lat, A.lng],
+            [B.lat, B.lng],
+          ],
+          {
+            color: active ? '#2563eb' : '#94a3b8',
+            weight: active ? 4 : 2,
+            opacity: active ? 0.9 : 0.45,
+            dashArray: active ? '8, 8' : undefined,
+          }
+        ).addTo(map)
+        polylinesRef.current[key] = polyline
+      }
+    })
+  }, [hospitals, externals, meshPairs, escalationPairs, activeTransferKeys])
+
+  // Update Markers (External suppliers & Remote Hospitals)
+  useEffect(() => {
+    const map = leafletMapRef.current
+    if (!map) return
+
+    // Render external supplier markers
+    Object.values(externals).forEach((node) => {
+      if (!node.lat || !node.lng) return
+      let marker = markersRef.current[node.id]
+
+      const iconHtml = `
+        <div class="leaflet-external-node ${node.kind === 'bank' ? 'bank' : 'external'}">
+          <div class="ext-badge">${node.kind === 'bank' ? '🏥 Regional Supplier' : '🏥 Hospital'}</div>
+          <div class="ext-name">${node.name}</div>
+        </div>
+      `
+
+      const customIcon = L.divIcon({
+        className: 'custom-leaflet-marker-ext',
+        html: iconHtml,
+        iconSize: [140, 40],
+        iconAnchor: [70, 20],
+      })
+
+      if (marker) {
+        marker.setIcon(customIcon)
+        marker.setLatLng([node.lat, node.lng])
+      } else {
+        marker = L.marker([node.lat, node.lng], { icon: customIcon }).addTo(map)
+        markersRef.current[node.id] = marker
+      }
+    })
+
+    // Render hospital markers
+    hospitals.forEach((h) => {
+      if (!h.lat || !h.lng) return
+      const f = computeForecast(h)
+      const colorHex = riskColorHex(f.risk)
+      const isSelected = h.id === selectedId
+
+      const markerHtml = `
+        <div class="leaflet-hospital-node ${isSelected ? 'selected' : ''} ${h.pph > 0 ? 'pph-alert' : ''}">
+          ${h.pph > 0 ? '<div class="pulse-ring" style="border-color:' + colorHex + '"></div>' : ''}
+          <div class="node-icon-circle" style="border-color: ${colorHex};">
+            <svg viewBox="0 0 14 14" width="14" height="14">
+              <rect x="5" y="0" width="4" height="14" rx="1" fill="${colorHex}" />
+              <rect x="0" y="5" width="14" height="4" rx="1" fill="${colorHex}" />
+            </svg>
+          </div>
+          <div class="node-label-box">
+            <span class="hosp-title">${h.name}</span>
+            <span class="hosp-meta">${h.available} u · ${h.bloodType} · <strong style="color:${colorHex}">${f.risk.toUpperCase()}</strong></span>
+          </div>
+        </div>
+      `
+
+      const customIcon = L.divIcon({
+        className: 'custom-leaflet-marker',
+        html: markerHtml,
+        iconSize: [160, 50],
+        iconAnchor: [80, 25],
+      })
+
+      let marker = markersRef.current[h.id]
+      if (marker) {
+        marker.setIcon(customIcon)
+        marker.setLatLng([h.lat, h.lng])
+      } else {
+        marker = L.marker([h.lat, h.lng], { icon: customIcon }).addTo(map)
+        marker.on('click', () => onSelect(h.id))
+        markersRef.current[h.id] = marker
+      }
+    })
+  }, [hospitals, externals, selectedId, onSelect])
+
+  // Expose imperative animateDrone function
   useImperativeHandle(ref, () => ({
     animateDrone(fromNode, toNode, units, durationMs) {
       return new Promise((resolve) => {
-        const svg = svgRef.current
-        if (!svg) {
+        const map = leafletMapRef.current
+        if (!map) {
           resolve()
           return
         }
 
-        const trail = makeEl('path', {
-          class: 'drone-trail',
-          d: `M${fromNode.x},${fromNode.y} L${fromNode.x},${fromNode.y}`,
-        })
-        svg.appendChild(trail)
+        const fromLat = fromNode.lat
+        const fromLng = fromNode.lng
+        const toLat = toNode.lat
+        const toLng = toNode.lng
 
-        const droneGroup = makeEl('g', { transform: `translate(${fromNode.x},${fromNode.y})` })
-        const glow = makeEl('circle', { cx: 0, cy: 0, r: 16, class: 'drone-glow' })
-        const body = makeEl('rect', { x: -8, y: -4, width: 16, height: 8, rx: 2, class: 'drone-body' })
-        const rotors = [
-          makeEl('circle', { cx: -9, cy: -6, r: 3, class: 'drone-rotor' }),
-          makeEl('circle', { cx: 9, cy: -6, r: 3, class: 'drone-rotor' }),
-          makeEl('circle', { cx: -9, cy: 6, r: 3, class: 'drone-rotor' }),
-          makeEl('circle', { cx: 9, cy: 6, r: 3, class: 'drone-rotor' }),
-        ]
-        rotors.forEach((r) => {
-          r.innerHTML = '<animate attributeName="opacity" values="1;0.3;1" dur="0.18s" repeatCount="indefinite" />'
+        // Flight Polyline Trail
+        const trailPolyline = L.polyline([[fromLat, fromLng], [fromLat, fromLng]], {
+          color: '#2563eb',
+          weight: 4,
+          opacity: 0.85,
+          dashArray: '4, 4',
+        }).addTo(map)
+
+        // Custom Drone Icon
+        const droneIcon = L.divIcon({
+          className: 'leaflet-drone-marker',
+          html: `
+            <div class="drone-container">
+              <div class="drone-glow"></div>
+              <div class="drone-body-graphic">
+                <span class="rotor r-tl"></span>
+                <span class="rotor r-tr"></span>
+                <span class="rotor r-bl"></span>
+                <span class="rotor r-br"></span>
+                <div class="core"></div>
+              </div>
+            </div>
+          `,
+          iconSize: [36, 36],
+          iconAnchor: [18, 18],
         })
-        droneGroup.appendChild(glow)
-        droneGroup.appendChild(body)
-        rotors.forEach((r) => droneGroup.appendChild(r))
-        svg.appendChild(droneGroup)
+
+        const droneMarker = L.marker([fromLat, fromLng], { icon: droneIcon, zIndexOffset: 1000 }).addTo(map)
 
         const totalKm = dist(fromNode, toNode)
         const totalMin = transferMinutes(totalKm)
         const start = performance.now()
-        const angle = (Math.atan2(toNode.y - fromNode.y, toNode.x - fromNode.x) * 180) / Math.PI
 
         function frame(now) {
           const t = Math.min(1, (now - start) / durationMs)
-          const x = fromNode.x + (toNode.x - fromNode.x) * t
-          const y = fromNode.y + (toNode.y - fromNode.y) * t
-          droneGroup.setAttribute('transform', `translate(${x},${y}) rotate(${angle})`)
-          trail.setAttribute('d', `M${fromNode.x},${fromNode.y} L${x},${y}`)
+          const currentLat = fromLat + (toLat - fromLat) * t
+          const currentLng = fromLng + (toLng - fromLng) * t
+
+          droneMarker.setLatLng([currentLat, currentLng])
+          trailPolyline.setLatLngs([[fromLat, fromLng], [currentLat, currentLng]])
 
           if (bannerRef.current) {
             const remainingTotalMin = totalMin * (1 - t)
@@ -76,118 +242,30 @@ const NetworkMap = forwardRef(function NetworkMap(
           }
 
           if (t < 1) {
-            requestAnimationFrame(frame)
+            activeAnimRef.current = requestAnimationFrame(frame)
           } else {
             if (bannerRef.current) {
               bannerRef.current.innerHTML = `<span class="delivered">✓ Delivered</span> — ${units} units at ${toNode.name}`
             }
             setTimeout(() => {
-              svg.removeChild(trail)
-              svg.removeChild(droneGroup)
+              if (map) {
+                map.removeLayer(trailPolyline)
+                map.removeLayer(droneMarker)
+              }
               if (bannerRef.current) bannerRef.current.classList.remove('show')
               resolve()
             }, 900)
           }
         }
-        requestAnimationFrame(frame)
+        activeAnimRef.current = requestAnimationFrame(frame)
       })
     },
   }))
 
-  function byId(id) {
-    return hospitals.find((h) => h.id === id) || externals[id]
-  }
-
   return (
-    <div className="map-frame">
+    <div className="map-frame leaflet-map-frame">
       <div className="dispatch-banner" ref={bannerRef}></div>
-      <svg
-        id="network"
-        ref={svgRef}
-        viewBox="0 0 1000 640"
-        role="img"
-        aria-label="Map of the remote hospital blood-sharing network and external suppliers"
-      >
-        <rect x={165} y={235} width={670} height={375} rx={14} className="zone-box" />
-        <text x={185} y={255} className="zone-label">
-          REMOTE NETWORK
-        </text>
-
-        {escalationPairs.map(([a, b]) => {
-          const A = byId(a)
-          const B = byId(b)
-          return <line key={`${a}-${b}`} x1={A.x} y1={A.y} x2={B.x} y2={B.y} className="escalation-line" />
-        })}
-
-        {meshPairs.map(([a, b]) => {
-          const A = byId(a)
-          const B = byId(b)
-          const key = lineKey(a, b)
-          const active = activeTransferKeys.has(key)
-          return (
-            <line
-              key={key}
-              x1={A.x}
-              y1={A.y}
-              x2={B.x}
-              y2={B.y}
-              className={active ? 'mesh-line active-transfer' : 'mesh-line'}
-            />
-          )
-        })}
-
-        {Object.values(externals).map((node) => (
-          <g className="external-node" key={node.id}>
-            <rect x={node.x - 66} y={node.y - 24} width={132} height={48} rx={8} />
-            <text x={node.x} y={node.y - 2} textAnchor="middle" className="node-label-name">
-              {node.name}
-            </text>
-            <text x={node.x} y={node.y + 15} textAnchor="middle" className="node-label-sub">
-              {node.kind === 'bank' ? 'Upstream supplier' : 'Larger hospital'}
-            </text>
-          </g>
-        ))}
-
-        {hospitals.map((h) => {
-          const f = computeForecast(h)
-          const color = riskColor(f.risk)
-          return (
-            <g
-              key={h.id}
-              className={'node-group' + (h.id === selectedId ? ' selected' : '')}
-              tabIndex={0}
-              role="button"
-              aria-label={`${h.name}, status ${f.risk.replace('-', ' ')}, ${h.available} units available`}
-              onClick={() => onSelect(h.id)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault()
-                  onSelect(h.id)
-                }
-              }}
-            >
-              <circle cx={h.x} cy={h.y} r={36} fill={color} opacity={h.pph ? 0.16 : 0.07} />
-              {h.pph > 0 && (
-                <circle cx={h.x} cy={h.y} r={34} fill="none" stroke={color} strokeWidth={1.5} opacity={0.7}>
-                  <animate attributeName="r" values="24;44;24" dur="1.6s" repeatCount="indefinite" />
-                  <animate attributeName="opacity" values="0.7;0;0.7" dur="1.6s" repeatCount="indefinite" />
-                </circle>
-              )}
-              <circle cx={h.x} cy={h.y} r={24} fill="var(--panel)" stroke={color} strokeWidth={2.5} className="node-circle" />
-              <g transform={`translate(${h.x - 7},${h.y - 7})`}>
-                <rect x={5} y={0} width={4} height={14} rx={1} fill={color} />
-                <rect x={0} y={5} width={14} height={4} rx={1} fill={color} />
-              </g>
-              <text x={h.x} y={h.y - 36} textAnchor="middle" className="node-label-name">
-                {h.name}
-              </text>
-              <text x={h.x} y={h.y + 45} textAnchor="middle" className="node-label-sub">
-                {h.available} units · {h.bloodType} · {f.risk.toUpperCase()}
-              </text>
-            </g>
-          )
-        })}
-      </svg>
+      <div ref={mapContainerRef} className="leaflet-container-view" style={{ width: '100%', height: '560px' }} />
     </div>
   )
 })

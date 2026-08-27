@@ -12,22 +12,26 @@ export const DRONE_SPEED_KMH = 80
 export const PIXEL_TO_KM = 0.115
 export const TICK_MS = 3200
 
-// External upstream suppliers, positioned above the remote mesh on the map.
+// External upstream suppliers, positioned in South Wollo / Amhara region.
 export const externals = {
-  bloodBank: { id: 'bloodBank', name: 'Regional Blood Bank', kind: 'bank', x: 500, y: 64 },
-  externalA: { id: 'externalA', name: 'External Hospital A', kind: 'external', x: 295, y: 172 },
-  externalB: { id: 'externalB', name: 'External Hospital B', kind: 'external', x: 705, y: 172 },
+  bloodBank: { id: 'bloodBank', name: 'Dessie Regional Blood Bank', kind: 'bank', lat: 11.1300, lng: 39.6333 },
+  externalA: { id: 'externalA', name: 'Borena General Hospital', kind: 'external', lat: 10.7000, lng: 38.7500 },
+  externalB: { id: 'externalB', name: 'Kombolcha General Hospital', kind: 'external', lat: 11.0833, lng: 39.7333 },
 }
 
-// Returns a fresh copy of the four remote hospitals with their starting
-// state. Called on load and on "Reset network".
+// Map default center (Mekane Selam, Amhara, Ethiopia)
+export const MAP_CENTER = [10.7500, 38.7500]
+export const MAP_ZOOM = 10
+
+// Returns a fresh copy of the four remote hospitals with real geographic coordinates
+// centered around Mekane Selam & surrounding area in Amhara, Ethiopia.
 export function freshHospitals() {
   return [
     {
       id: 'h1',
-      name: 'Hospital 1',
-      x: 325,
-      y: 415,
+      name: 'Mekane Selam General Hospital',
+      lat: 10.7512,
+      lng: 38.7524,
       bloodType: 'O+',
       patients: 30,
       baselinePatients: 28,
@@ -42,9 +46,9 @@ export function freshHospitals() {
     },
     {
       id: 'h2',
-      name: 'Hospital 2',
-      x: 675,
-      y: 415,
+      name: 'Gishen Hospital (Borena)',
+      lat: 10.7850,
+      lng: 38.8320,
       bloodType: 'A+',
       patients: 35,
       baselinePatients: 30,
@@ -59,9 +63,9 @@ export function freshHospitals() {
     },
     {
       id: 'h3',
-      name: 'Hospital 3',
-      x: 500,
-      y: 545,
+      name: 'Sayint Health Center',
+      lat: 10.6650,
+      lng: 38.6950,
       bloodType: 'O+',
       patients: 42,
       baselinePatients: 36,
@@ -76,9 +80,9 @@ export function freshHospitals() {
     },
     {
       id: 'h4',
-      name: 'Hospital 4',
-      x: 500,
-      y: 275,
+      name: 'Kelala Primary Hospital',
+      lat: 10.8400,
+      lng: 38.7120,
       bloodType: 'B+',
       patients: 25,
       baselinePatients: 26,
