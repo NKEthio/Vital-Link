@@ -50,7 +50,7 @@ export function riskColor(risk) {
 }
 
 export function riskColorHex(risk) {
-  return risk === 'at-risk' ? '#f0534a' : risk === 'watch' ? '#eca83e' : '#3ecf8e'
+  return risk === 'at-risk' ? '#d9383a' : risk === 'watch' ? '#d97706' : '#059669'
 }
 
 /**

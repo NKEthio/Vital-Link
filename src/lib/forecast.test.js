@@ -116,9 +116,9 @@ describe('forecast library pure functions', () => {
       expect(riskColor('watch')).toBe('var(--amber)')
       expect(riskColor('stable')).toBe('var(--green)')
 
-      expect(riskColorHex('at-risk')).toBe('#f0534a')
-      expect(riskColorHex('watch')).toBe('#eca83e')
-      expect(riskColorHex('stable')).toBe('#3ecf8e')
+      expect(riskColorHex('at-risk')).toBe('#d9383a')
+      expect(riskColorHex('watch')).toBe('#d97706')
+      expect(riskColorHex('stable')).toBe('#059669')
     })
   })
 
