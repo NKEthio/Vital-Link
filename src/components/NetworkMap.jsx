@@ -24,7 +24,7 @@ const NetworkMap = forwardRef(function NetworkMap(
     return hospitals.find((h) => h.id === id) || externals[id]
   }
 
-  // Initialize Leaflet Map once
+  // Initialize Leaflet Map once & setup ResizeObserver for map resizing
   useEffect(() => {
     if (!mapContainerRef.current || leafletMapRef.current) return
 
@@ -42,7 +42,13 @@ const NetworkMap = forwardRef(function NetworkMap(
 
     leafletMapRef.current = map
 
+    const resizeObserver = new ResizeObserver(() => {
+      map.invalidateSize()
+    })
+    resizeObserver.observe(mapContainerRef.current)
+
     return () => {
+      resizeObserver.disconnect()
       map.remove()
       leafletMapRef.current = null
     }
@@ -177,8 +183,13 @@ const NetworkMap = forwardRef(function NetworkMap(
     })
   }, [hospitals, externals, selectedId, onSelect])
 
-  // Expose imperative animateDrone function
+  // Expose imperative animateDrone function and invalidateSize helper
   useImperativeHandle(ref, () => ({
+    invalidateSize() {
+      if (leafletMapRef.current) {
+        leafletMapRef.current.invalidateSize()
+      }
+    },
     animateDrone(fromNode, toNode, units, durationMs) {
       return new Promise((resolve) => {
         const map = leafletMapRef.current
