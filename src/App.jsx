@@ -20,7 +20,9 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('feed')
   const [clockText, setClockText] = useState(() => new Date().toLocaleTimeString([], { hour12: false }))
   const [activeTransferKeys, setActiveTransferKeys] = useState(() => new Set())
+  const [isFullscreen, setIsFullscreen] = useState(false)
 
+  const appContainerRef = useRef(null)
   const mapRef = useRef(null)
   const hospitalsRef = useRef(hospitals)
   const simRunningRef = useRef(false)
@@ -37,6 +39,56 @@ export default function App() {
     }, 1000)
     return () => clearInterval(handle)
   }, [])
+
+  // --- fullscreen handler ---
+  useEffect(() => {
+    function handleFullscreenChange() {
+      const fsElement =
+        document.fullscreenElement ||
+        document.webkitFullscreenElement ||
+        document.mozFullScreenElement ||
+        document.msFullscreenElement
+      setIsFullscreen(!!fsElement)
+      if (mapRef.current?.invalidateSize) {
+        setTimeout(() => {
+          mapRef.current.invalidateSize()
+        }, 100)
+      }
+    }
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange)
+    document.addEventListener('webkitfullscreenchange', handleFullscreenChange)
+    document.addEventListener('mozfullscreenchange', handleFullscreenChange)
+    document.addEventListener('MSFullscreenChange', handleFullscreenChange)
+
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange)
+      document.removeEventListener('webkitfullscreenchange', handleFullscreenChange)
+      document.removeEventListener('mozfullscreenchange', handleFullscreenChange)
+      document.removeEventListener('MSFullscreenChange', handleFullscreenChange)
+    }
+  }, [])
+
+  const toggleFullscreen = () => {
+    if (!isFullscreen) {
+      const el = appContainerRef.current || document.documentElement
+      if (el.requestFullscreen) {
+        el.requestFullscreen()
+      } else if (el.webkitRequestFullscreen) {
+        el.webkitRequestFullscreen()
+      } else if (el.msRequestFullscreen) {
+        el.msRequestFullscreen()
+      }
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen()
+      } else if (document.webkitExitFullscreen) {
+        document.webkitExitFullscreen()
+      } else if (document.msExitFullscreen) {
+        document.msExitFullscreen()
+      }
+    }
+  }
 
   // --- console helpers ---
   function pushFeed(level, html) {
@@ -233,8 +285,15 @@ export default function App() {
   }
 
   return (
-    <>
-      <Header kpis={kpis} clockText={clockText} isAlert={isAlert} onReset={resetNetwork} />
+    <div className={`app-container ${isFullscreen ? 'is-fullscreen' : ''}`} ref={appContainerRef}>
+      <Header
+        kpis={kpis}
+        clockText={clockText}
+        isAlert={isAlert}
+        onReset={resetNetwork}
+        isFullscreen={isFullscreen}
+        onToggleFullscreen={toggleFullscreen}
+      />
 
       <main className="layout">
         <Sidebar hospitals={hospitals} selectedId={selectedId} onSelect={selectHospital} />
@@ -242,19 +301,42 @@ export default function App() {
         <section className="map-col">
           <div className="map-toolbar">
             <span className="map-title">Regional network map</span>
-            <div className="legend">
-              <span className="legend-item">
-                <span className="legend-swatch" style={{ background: 'var(--green)' }}></span>Stable
-              </span>
-              <span className="legend-item">
-                <span className="legend-swatch" style={{ background: 'var(--amber)' }}></span>Watch
-              </span>
-              <span className="legend-item">
-                <span className="legend-swatch" style={{ background: 'var(--red)' }}></span>At risk
-              </span>
-              <span className="legend-item">
-                <span className="legend-swatch" style={{ background: 'var(--blue)' }}></span>Drone en route
-              </span>
+            <div className="map-toolbar-right">
+              <div className="legend">
+                <span className="legend-item">
+                  <span className="legend-swatch" style={{ background: 'var(--green)' }}></span>Stable
+                </span>
+                <span className="legend-item">
+                  <span className="legend-swatch" style={{ background: 'var(--amber)' }}></span>Watch
+                </span>
+                <span className="legend-item">
+                  <span className="legend-swatch" style={{ background: 'var(--red)' }}></span>At risk
+                </span>
+                <span className="legend-item">
+                  <span className="legend-swatch" style={{ background: 'var(--blue)' }}></span>Drone en route
+                </span>
+              </div>
+              <button
+                className="btn btn-fullscreen"
+                onClick={toggleFullscreen}
+                title={isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'}
+              >
+                {isFullscreen ? (
+                  <>
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3" />
+                    </svg>
+                    <span>Exit Fullscreen</span>
+                  </>
+                ) : (
+                  <>
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />
+                    </svg>
+                    <span>Fullscreen</span>
+                  </>
+                )}
+              </button>
             </div>
           </div>
           <NetworkMap
@@ -285,6 +367,6 @@ export default function App() {
       <div className={'scrim' + (selectedId ? ' show' : '')} onClick={() => setSelectedId(null)}></div>
 
       <footer>Simulated demonstration data — decision-support prototype, not connected to live hospital systems.</footer>
-    </>
+    </div>
   )
 }
