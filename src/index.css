@@ -147,32 +147,173 @@ main.layout {
 .legend-swatch { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
 .map-frame {
   position: relative;
-  background:
-    linear-gradient(var(--border-soft) 1px, transparent 1px) 0 0/38px 38px,
-    linear-gradient(90deg, var(--border-soft) 1px, transparent 1px) 0 0/38px 38px,
-    #ffffff;
-  border: 1px solid var(--border); border-radius: var(--radius); padding: 4px; overflow: hidden;
+  background: #ffffff;
+  border: 1px solid var(--border); border-radius: var(--radius); padding: 0; overflow: hidden;
   box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
 }
-svg#network { width: 100%; height: auto; display: block; }
+.leaflet-container-view {
+  border-radius: var(--radius);
+  z-index: 1;
+}
 
-.node-group { cursor: pointer; }
-.node-circle { transition: r 0.15s ease, stroke 0.3s ease; }
-.node-group:hover .node-circle { filter: brightness(0.95); }
-.node-group.selected .node-circle { stroke: var(--blue); stroke-width: 3.5; }
-.node-label-name { font-family: var(--font-display); font-weight: 600; fill: var(--text); font-size: 12.5px; }
-.node-label-sub { font-family: var(--font-mono); fill: var(--text-dim); font-size: 10px; }
-.mesh-line { stroke: #cbd5e1; stroke-width: 1.4; }
-.mesh-line.active-transfer { stroke: var(--blue); stroke-width: 2.2; opacity: 0.6; }
-.escalation-line { stroke: #94a3b8; stroke-width: 1.1; stroke-dasharray: 3 5; opacity: 0.7; }
-.external-node rect { fill: #f8fafc; stroke: #cbd5e1; }
-.zone-box { fill: none; stroke: #cbd5e1; stroke-dasharray: 3 5; }
-.zone-label { font-family: var(--font-mono); font-size: 9.5px; letter-spacing: 0.1em; fill: var(--text-faint); }
+/* Custom Leaflet Marker Styling */
+.custom-leaflet-marker, .custom-leaflet-marker-ext {
+  background: transparent !important;
+  border: none !important;
+}
 
-.drone-trail { fill: none; stroke: var(--blue); stroke-width: 2.5; stroke-linecap: round; filter: drop-shadow(0 0 3px rgba(37, 99, 235, 0.4)); }
-.drone-glow { fill: var(--blue); opacity: 0.12; }
-.drone-rotor { fill: var(--blue); opacity: 0.85; }
-.drone-body { fill: #1e293b; stroke: var(--blue); stroke-width: 1.4; }
+.leaflet-hospital-node {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #ffffff;
+  border: 1.5px solid var(--border);
+  border-radius: 20px;
+  padding: 4px 10px 4px 6px;
+  box-shadow: 0 3px 10px rgba(15, 23, 42, 0.15);
+  cursor: pointer;
+  position: relative;
+  transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+  white-space: nowrap;
+}
+.leaflet-hospital-node:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 14px rgba(15, 23, 42, 0.2);
+}
+.leaflet-hospital-node.selected {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.25), 0 4px 12px rgba(15, 23, 42, 0.15);
+}
+
+.node-icon-circle {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 2px solid var(--green);
+  background: var(--panel);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+}
+
+.node-label-box {
+  display: flex;
+  flex-direction: column;
+}
+.hosp-title {
+  font-family: var(--font-display);
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1.2;
+}
+.hosp-meta {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  color: var(--text-dim);
+}
+
+/* Pulsing alert ring for PPH emergency */
+.pulse-ring {
+  position: absolute;
+  top: -6px;
+  left: -6px;
+  right: -6px;
+  bottom: -6px;
+  border-radius: 26px;
+  border: 2px solid var(--red);
+  animation: pulse-ring-anim 1.6s ease-out infinite;
+  pointer-events: none;
+}
+@keyframes pulse-ring-anim {
+  0% { transform: scale(0.9); opacity: 0.9; }
+  100% { transform: scale(1.15); opacity: 0; }
+}
+
+/* External supplier nodes */
+.leaflet-external-node {
+  background: #1e293b;
+  color: #f8fafc;
+  border: 1px solid #475569;
+  border-radius: 8px;
+  padding: 5px 9px;
+  box-shadow: 0 3px 10px rgba(15, 23, 42, 0.2);
+  text-align: center;
+  white-space: nowrap;
+}
+.leaflet-external-node.bank {
+  border-color: #3b82f6;
+}
+.ext-badge {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.ext-name {
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 600;
+  color: #ffffff;
+}
+
+/* Leaflet Drone Marker */
+.leaflet-drone-marker {
+  background: transparent !important;
+  border: none !important;
+}
+.drone-container {
+  position: relative;
+  width: 36px;
+  height: 36px;
+}
+.drone-glow {
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  background: rgba(37, 99, 235, 0.3);
+  animation: drone-pulse 1s infinite alternate;
+}
+@keyframes drone-pulse {
+  from { opacity: 0.4; transform: scale(0.9); }
+  to { opacity: 0.9; transform: scale(1.1); }
+}
+.drone-body-graphic {
+  position: absolute;
+  inset: 6px;
+  background: #0f172a;
+  border: 2px solid #3b82f6;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+}
+.drone-body-graphic .core {
+  width: 8px;
+  height: 8px;
+  background: #38bdf8;
+  border-radius: 50%;
+}
+.drone-body-graphic .rotor {
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  background: #2563eb;
+  border-radius: 50%;
+  animation: rotor-spin 0.15s linear infinite;
+}
+.rotor.r-tl { top: -3px; left: -3px; }
+.rotor.r-tr { top: -3px; right: -3px; }
+.rotor.r-bl { bottom: -3px; left: -3px; }
+.rotor.r-br { bottom: -3px; right: -3px; }
+@keyframes rotor-spin {
+  0% { opacity: 1; }
+  50% { opacity: 0.3; }
+  100% { opacity: 1; }
+}
 
 .dispatch-banner {
   position: absolute; left: 50%; top: 14px; transform: translateX(-50%);

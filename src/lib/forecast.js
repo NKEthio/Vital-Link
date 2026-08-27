@@ -8,6 +8,20 @@
 import { DRONE_SPEED_KMH, PIXEL_TO_KM } from '../data/network.js'
 
 export function dist(a, b) {
+  if (a.lat !== undefined && a.lng !== undefined && b.lat !== undefined && b.lng !== undefined) {
+    // Haversine formula to compute geodesic distance in km between lat/lng coordinates
+    const R = 6371
+    const dLat = ((b.lat - a.lat) * Math.PI) / 180
+    const dLng = ((b.lng - a.lng) * Math.PI) / 180
+    const lat1 = (a.lat * Math.PI) / 180
+    const lat2 = (b.lat * Math.PI) / 180
+
+    const sinDLat = Math.sin(dLat / 2)
+    const sinDLng = Math.sin(dLng / 2)
+    const aa = sinDLat * sinDLat + Math.cos(lat1) * Math.cos(lat2) * sinDLng * sinDLng
+    const c = 2 * Math.atan2(Math.sqrt(aa), Math.sqrt(1 - aa))
+    return R * c
+  }
   const dx = a.x - b.x
   const dy = a.y - b.y
   return Math.sqrt(dx * dx + dy * dy) * PIXEL_TO_KM
